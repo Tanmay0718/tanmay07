@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Packaged Food Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #scanButton, #captureButton {
+            display: none;
+        }
+        #conclusion {
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Packaged Food Scanner</h1>
+        
+        <!-- Button to initiate image upload -->
+        <button class="btn btn-primary" id="uploadButton">Click to Upload Image</button>
+
+        <!-- Button to initiate camera capture -->
+        <button class="btn btn-success" id="captureButton">Capture Image</button>
+
+        <!-- File input for uploading image -->
+        <input type="file" id="imageInput" style="display: none" accept="image/*">
+        
+        <!-- Video feed for camera capture -->
+        <video id="videoFeed" width="100%" height="auto" style="display: none" autoplay></video>
+
+        <div id="pieChartContainer">
+            <canvas id="pieChart"></canvas>
+        </div>
+
+        <h3>Pros and Cons</h3>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Pros</th>
+                    <th>Cons</th>
+                </tr>
+            </thead>
+            <tbody id="prosConsTable">
+                <tr>
+                    <td>-</td>
+                    <td>-</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div id="conclusion">
+            Conclusion will be displayed here.
+        </div>
+    </div>
+
+    <script>
+        // Show the upload image button and hide the capture button initially
+        document.getElementById('uploadButton').addEventListener('click', function() {
+            document.getElementById('captureButton').style.display = 'block';
+            document.getElementById('imageInput').style.display = 'block';
+        });
+
+        // Handle camera capture button
+        document.getElementById('captureButton').addEventListener('click', function() {
+            document.getElementById('videoFeed').style.display = 'block';
+            document.getElementById('captureButton').style.display = 'none';
+            startCamera();
+        });
+
+        // Start camera and show video feed
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    const video = document.getElementById('videoFeed');
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(function(error) {
+                    console.log('Error accessing the camera: ', error);
+                });
+        }
+
+        // Capture image from video feed
+        function captureImage() {
+            const video = document.getElementById('videoFeed');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const image = canvas.toDataURL('image/png'); // Convert the captured image to base64
+
+            // Send the image to backend
+            sendImageToBackend(image);
+        }
+
+        // Send the captured image to the backend
+        function sendImageToBackend(image) {
+            fetch('/scan', {
+                method: 'POST',
+                body: JSON.stringify({ image: image }),
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Process the response from backend (e.g., pie chart, pros/cons)
+                renderPieChart(data.pie_chart_data);
+                updateTable(data.pros, data.cons);
+                document.getElementById('conclusion').innerText = data.conclusion;
+            })
+            .catch(error => console.error('Error sending image to backend:', error));
+        }
+
+        // Render pie chart using Chart.js
+        function renderPieChart(data) {
+            const ctx = document.getElementById('pieChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        label: 'Nutrition Breakdown',
+                        data: Object.values(data),
+                        backgroundColor: ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99', '#c2c2f0']
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        }
+
+        // Update pros and cons table
+        function updateTable(pros, cons) {
+            const table = document.getElementById('prosConsTable');
+            table.innerHTML = ''; // Clear previous rows
+
+            for (let i = 0; i < Math.max(pros.length, cons.length); i++) {
+                const row = document.createElement('tr');
+                const prosCell = document.createElement('td');
+                const consCell = document.createElement('td');
+
+                prosCell.textContent = pros[i] || '-';
+                consCell.textContent = cons[i] || '-';
+
+                row.appendChild(prosCell);
+                row.appendChild(consCell);
+                table.appendChild(row);
+            }
+        }
+
+        // Example of sending the image on upload (for file input)
+        document.getElementById('imageInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function() {
+                const imageData = reader.result;
+                sendImageToBackend(imageData);
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+</html>
